@@ -35,7 +35,7 @@ class DockingEnvironment(gym.Env):
         self.x = np.zeros(6)    # Starting state
         
         self.observation_space = Box(np.array([0., 0., 0., -100., -100., -100.], dtype=np.float64), np.array([1000., 1000., 1000., 100., 100., 100.], dtype=np.float64), dtype=np.float64)
-        self.starting_space = Box(np.array([0., 0., 0., -1., -1., -1.], dtype=np.float64), np.array([1000., 1000., 1000., 1., 1., 1.], dtype=np.float64), dtype=np.float64)
+        self.starting_space = Box(np.array([100., 100., 100., -10., -10., -10.], dtype=np.float64), np.array([1000., 1000., 1000., 10., 10., 10.], dtype=np.float64), dtype=np.float64)
         self.action_space = Box(-30.*np.ones(3, dtype=np.float64), 30.*np.ones(3, dtype=np.float64), dtype=np.float64)
         
     def reset(self):
@@ -47,16 +47,16 @@ class DockingEnvironment(gym.Env):
     def step(self, action):
         
         # Propagate
-        sol = solve_ivp(dynamics, [0,1], self.x, args=(action,))
+        sol = solve_ivp(dynamics, [0,.1], self.x, args=(action,))
         self.x = sol.y[:,-1]
         obs = observation(self.x)
         
         # Get reward
-        rew, term, trunc = self.reward()
+        rew, term, trunc = self.reward(action)
         
         return obs, rew, term, trunc, dict()
     
-    def reward(self):
+    def reward(self, action):
         
         # Check conical constraint
         incone = np.all(self.x[:3] >= 0)
@@ -65,6 +65,7 @@ class DockingEnvironment(gym.Env):
         inradius = (np.linalg.norm(self.x[:3]) < 1)
         invel = (np.linalg.norm(self.x[3:]) < .1)
         term = True
+        trunc = True
         
         # Terminate if left cone
         if not incone:
@@ -72,6 +73,7 @@ class DockingEnvironment(gym.Env):
             
         # Win if in range and moving slow enough
         elif inradius and invel:
+            trunc = False
             rew = 1
             
         # Terminate if crash
@@ -80,7 +82,8 @@ class DockingEnvironment(gym.Env):
             
         else:
             term = False
-            rew = 0
+            trunc = False
+            rew = -.001 * np.linalg.norm(action) / np.sqrt(3*30**2)
             
-        return rew, term, term
+        return rew, term, trunc
             
