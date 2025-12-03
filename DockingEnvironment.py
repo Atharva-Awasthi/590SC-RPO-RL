@@ -33,18 +33,21 @@ class DockingEnvironment(gym.Env):
     
     def __init__(self):
         self.x = np.zeros(6)    # Starting state
+        self.dist0 = 0
         
         self.observation_space = Box(np.array([0., 0., 0., -100., -100., -100.], dtype=np.float64), np.array([1000., 1000., 1000., 100., 100., 100.], dtype=np.float64), dtype=np.float64)
         self.starting_space = Box(np.array([100., 100., 100., -10., -10., -10.], dtype=np.float64), np.array([1000., 1000., 1000., 10., 10., 10.], dtype=np.float64), dtype=np.float64)
-        self.action_space = Box(-30.*np.ones(3, dtype=np.float64), 30.*np.ones(3, dtype=np.float64), dtype=np.float64)
+        self.action_space = Box(-np.ones(3, dtype=np.float64), np.ones(3, dtype=np.float64), dtype=np.float64)
         
-    def reset(self):
+    def reset(self, seed=None):
         self.x = self.starting_space.sample()
+        self.dist0 = np.linalg.norm(self.x[:3])
         obs = observation(self.x)
         
         return obs, dict()
     
     def step(self, action):
+        action = action*30
         
         # Propagate
         sol = solve_ivp(dynamics, [0,.1], self.x, args=(action,))
@@ -66,9 +69,11 @@ class DockingEnvironment(gym.Env):
         invel = (np.linalg.norm(self.x[3:]) < .1)
         term = True
         trunc = True
+        dist = np.linalg.norm(self.x[:3])
         
         # Terminate if left cone
         if not incone:
+            #dist = np.linalg.norm(self.x[:3])
             rew = -1
             
         # Win if in range and moving slow enough
@@ -83,7 +88,8 @@ class DockingEnvironment(gym.Env):
         else:
             term = False
             trunc = False
-            rew = -.001 * np.linalg.norm(action) / np.sqrt(3*30**2)
+            rew = .01 * (self.dist0 - dist) / self.dist0
+            #rew = -.001 * np.linalg.norm(action) / np.sqrt(3*30**2)
             
         return rew, term, trunc
             
