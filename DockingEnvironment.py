@@ -27,16 +27,18 @@ def observation(x):
     # Measurement noise for partial observability
     # Noise is mean zero gaussian, covariance scales with relative distance
     return x + np.sqrt(np.linalg.norm(x[:3]))/60 * np.random.randn(6)
-    
 
 class DockingEnvironment(gym.Env):
     
-    def __init__(self):
+    def __init__(self, radius=2, velthresh=1):
         self.x = np.zeros(6)    # Starting state
         self.dist0 = 0
         
-        self.observation_space = Box(np.array([0., 0., 0., -100., -100., -100.], dtype=np.float64), np.array([1000., 1000., 1000., 100., 100., 100.], dtype=np.float64), dtype=np.float64)
-        self.starting_space = Box(np.array([100., 100., 100., -10., -10., -10.], dtype=np.float64), np.array([1000., 1000., 1000., 10., 10., 10.], dtype=np.float64), dtype=np.float64)
+        self.radius = radius
+        self.velthresh = velthresh
+        
+        self.observation_space = Box(np.array([0., 0., 0., -10., -10., -10.], dtype=np.float64), np.array([100., 100., 100., 10., 10., 10.], dtype=np.float64), dtype=np.float64)
+        self.starting_space = Box(np.array([0., 0., 0., -1., -1., -1.], dtype=np.float64), np.array([50., 50., 50., 1., 1., 1.], dtype=np.float64), dtype=np.float64)
         self.action_space = Box(-np.ones(3, dtype=np.float64), np.ones(3, dtype=np.float64), dtype=np.float64)
         
     def reset(self, seed=None):
@@ -47,7 +49,6 @@ class DockingEnvironment(gym.Env):
         return obs, dict()
     
     def step(self, action):
-        action = action*30
         
         # Propagate
         sol = solve_ivp(dynamics, [0,.1], self.x, args=(action,))
@@ -65,31 +66,41 @@ class DockingEnvironment(gym.Env):
         incone = np.all(self.x[:3] >= 0)
         
         # Check terminal condition
-        inradius = (np.linalg.norm(self.x[:3]) < 1)
-        invel = (np.linalg.norm(self.x[3:]) < .1)
+        dist = np.linalg.norm(self.x[:3])
+        vel = np.linalg.norm(self.x[3:])
+        dist_rew = self.radius / dist
+        vel_rew = self.velthresh / vel
         term = True
         trunc = True
-        dist = np.linalg.norm(self.x[:3])
         
         # Terminate if left cone
         if not incone:
             #dist = np.linalg.norm(self.x[:3])
-            rew = -1
+            print(1)
+            rew = -1 + 2*dist_rew
+            
+        # Terminate if out of bounds
+        elif dist > 173.2:
+            print(2)
+            rew = -2
             
         # Win if in range and moving slow enough
-        elif inradius and invel:
+        elif dist <= self.radius and vel <= self.velthresh:
+            print(3)
             trunc = False
             rew = 1
             
         # Terminate if crash
-        elif inradius and not invel:
-            rew = -1
+        elif dist <= self.radius and vel > self.velthresh:
+            print(4)
+            rew = 0 + vel_rew
             
         else:
             term = False
             trunc = False
-            rew = .01 * (self.dist0 - dist) / self.dist0
-            #rew = -.001 * np.linalg.norm(action) / np.sqrt(3*30**2)
+            #rew = -1e-2* np.dot(self.x[:3], self.x[3:]) / np.linalg.norm(self.x[:3]) / np.linalg.norm(self.x[3:])
+            rew = 0
+            
             
         return rew, term, trunc
             
