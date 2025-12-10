@@ -56,9 +56,9 @@ class DockingEnvironment(gym.Env):
         obs = observation(self.x)
         
         # Get reward
-        rew, term, trunc = self.reward(action)
+        rew, term, trunc, info = self.reward(action)
         
-        return obs, rew, term, trunc, dict()
+        return obs, rew, term, trunc, info
     
     def reward(self, action):
         
@@ -72,27 +72,34 @@ class DockingEnvironment(gym.Env):
         vel_rew = self.velthresh / vel
         term = True
         trunc = True
+        prog_rew = -0.005 * (dist - self.dist0)/self.dist0
+        control_cost = -0.0001 * np.linalg.norm(action)**2
         
         # Terminate if left cone
         if not incone:
             #dist = np.linalg.norm(self.x[:3])
             print(1)
+            info = {'end condition': 1}
             rew = -1 + 2*dist_rew
             
         # Terminate if out of bounds
         elif dist > 173.2:
             print(2)
+            info = {'end condition': 2}
             rew = -2
             
         # Win if in range and moving slow enough
         elif dist <= self.radius and vel <= self.velthresh:
             print(3)
             trunc = False
+            info = {'end condition': 3}
+
             rew = 1
             
         # Terminate if crash
         elif dist <= self.radius and vel > self.velthresh:
             print(4)
+            info = {'end condition': 4}
             rew = 0 + vel_rew
             
         else:
@@ -100,7 +107,7 @@ class DockingEnvironment(gym.Env):
             trunc = False
             #rew = -1e-2* np.dot(self.x[:3], self.x[3:]) / np.linalg.norm(self.x[:3]) / np.linalg.norm(self.x[3:])
             rew = 0
-            
-            
-        return rew, term, trunc
+            info = {'end condition': 5}
+        rew += control_cost + prog_rew  
+        return rew, term, trunc, info
             
